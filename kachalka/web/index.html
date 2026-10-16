@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Качалка</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/phosphor/style.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="rec" id="rec" aria-hidden="true"></span>Качалка</div>
+    <div class="top-actions">
+      <button class="btn ghost" id="openFolder" type="button"><i class="ph ph-folder-open" aria-hidden="true"></i><span>Папка</span></button>
+      <button class="btn ghost square" id="openSettings" type="button" aria-label="Настройки" title="Настройки"><i class="ph ph-gear-six" aria-hidden="true"></i></button>
+    </div>
+  </header>
+
+  <div class="offline" id="offline" role="alert" hidden>
+    <i class="ph ph-plugs" aria-hidden="true"></i>
+    <span>Качалка перестала отвечать. Закрой окно и открой её снова.</span>
+  </div>
+
+  <main class="wrap">
+    <section class="setup" id="setup" aria-labelledby="setupTitle" aria-live="polite" hidden>
+      <h2 id="setupTitle">Готовлю Качалку к работе</h2>
+      <p class="setup-text" id="setupText">Один раз скачиваю программы, которые делают всю работу. Это около 150 МБ, дальше всё запускается сразу.</p>
+      <ul class="setup-list" id="setupList"></ul>
+    </section>
+
+    <form class="intake" id="intake" autocomplete="off" novalidate>
+      <label class="intake-label" for="url">Ссылка на видео, плейлист или канал</label>
+      <div class="intake-row">
+        <div class="url-field">
+          <i class="ph ph-link-simple" aria-hidden="true"></i>
+          <input id="url" name="url" type="text" inputmode="url" spellcheck="false" autocapitalize="off"
+                 placeholder="https://www.youtube.com/watch?v=...">
+          <button type="button" class="btn quiet" id="pasteBtn">Вставить</button>
+        </div>
+        <button class="btn primary" id="findBtn" type="submit">Найти</button>
+      </div>
+      <div class="clip" id="clip" hidden>
+        <i class="ph ph-clipboard-text" aria-hidden="true"></i>
+        <span>В буфере ссылка <span class="clip-url" id="clipUrl"></span></span>
+        <button type="button" class="btn quiet small" id="clipUse">Вставить</button>
+        <button type="button" class="btn quiet small square" id="clipHide" aria-label="Скрыть подсказку" title="Скрыть"><i class="ph ph-x" aria-hidden="true"></i></button>
+      </div>
+      <label class="check" id="playlistSwitch" hidden>
+        <input type="checkbox" id="wholePlaylist">
+        <span>Ссылка из плейлиста: показать весь плейлист, а не только это видео</span>
+      </label>
+      <div class="alert" id="intakeError" role="alert" hidden></div>
+    </form>
+
+    <section class="preview" id="preview" aria-live="polite" hidden></section>
+
+    <section class="queue" aria-labelledby="queueTitle">
+      <div class="queue-head">
+        <h2 id="queueTitle">Загрузки</h2>
+        <span class="queue-sum" id="queueSum"></span>
+        <button class="btn ghost small" id="clearDone" type="button" hidden>Убрать завершённые</button>
+      </div>
+      <ul class="jobs" id="jobs"></ul>
+      <div class="empty" id="emptyQueue">
+        <p class="empty-title">Здесь появятся загрузки</p>
+        <p>Скопируй ссылку на YouTube, вернись в это окно и нажми <kbd id="modKey">⌘</kbd><kbd>V</kbd>. Ссылку можно и просто перетащить сюда.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+    <div class="drawer-head">
+      <h2 id="settingsTitle">Настройки</h2>
+      <button class="btn ghost square" id="closeSettings" type="button" aria-label="Закрыть настройки" title="Закрыть"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="drawer-body">
+      <div class="field">
+        <label for="sFolder">Папка для загрузок</label>
+        <div class="field-row">
+          <input id="sFolder" type="text" spellcheck="false" data-key="folder">
+          <button class="btn ghost" id="pickFolder" type="button">Выбрать…</button>
+        </div>
+        <p class="field-msg" data-for="folder"></p>
+      </div>
+
+      <div class="field" id="cookiesField">
+        <label for="sCookies">Куки из браузера</label>
+        <select id="sCookies" data-key="cookies">
+          <option value="">Не использовать</option>
+          <option value="chrome">Google Chrome</option>
+          <option value="safari">Safari</option>
+          <option value="firefox">Firefox</option>
+          <option value="brave">Brave</option>
+          <option value="edge">Microsoft Edge</option>
+          <option value="opera">Opera</option>
+          <option value="vivaldi">Vivaldi</option>
+          <option value="chromium">Chromium</option>
+        </select>
+        <p class="help" id="cookiesHelp"></p>
+        <p class="field-msg" data-for="cookies"></p>
+      </div>
+
+      <div class="field">
+        <span class="label" id="parallelLabel">Сколько качать одновременно</span>
+        <div class="seg" role="radiogroup" aria-labelledby="parallelLabel" id="sParallel">
+          <button type="button" role="radio" data-value="1">1</button>
+          <button type="button" role="radio" data-value="2">2</button>
+          <button type="button" role="radio" data-value="3">3</button>
+          <button type="button" role="radio" data-value="4">4</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="sTemplate">Имя файла</label>
+        <select id="sTemplate" data-key="template">
+          <option value="title">Название</option>
+          <option value="title_id">Название [id видео]</option>
+          <option value="channel_title">Канал - Название</option>
+          <option value="date_title">Дата выхода и название</option>
+        </select>
+        <p class="help" id="templateExample"></p>
+      </div>
+
+      <div class="field">
+        <label for="sSubs">Языки субтитров</label>
+        <input id="sSubs" type="text" spellcheck="false" data-key="subs_langs">
+        <p class="help">Через запятую. Запись ru.* берёт все русские дорожки, включая автоматические.</p>
+        <p class="field-msg" data-for="subs_langs"></p>
+      </div>
+
+      <div class="field">
+        <label for="sProxy">Прокси</label>
+        <input id="sProxy" type="text" spellcheck="false" placeholder="socks5://127.0.0.1:1080" data-key="proxy">
+        <p class="help">Оставь пустым, чтобы качать напрямую.</p>
+        <p class="field-msg" data-for="proxy"></p>
+      </div>
+
+      <div class="field" id="toolsField">
+        <span class="label">Компоненты</span>
+        <ul class="tool-list" id="toolList"></ul>
+        <p class="ytdlp-line" id="ytdlpVersion"></p>
+        <div class="field-row wrap-row">
+          <button class="btn ghost" id="updateBtn" type="button"><i class="ph ph-arrow-clockwise" aria-hidden="true"></i><span>Обновить yt-dlp</span></button>
+          <button class="btn ghost" id="checkTools" type="button"><i class="ph ph-wrench" aria-hidden="true"></i><span>Проверить компоненты</span></button>
+        </div>
+        <p class="help">YouTube регулярно ломает загрузчики. Если что-то перестало качаться, сначала обнови yt-dlp.</p>
+        <pre class="update-log" id="updateLog" hidden></pre>
+      </div>
+
+      <div class="field" id="aboutField">
+        <span class="label">О программе</span>
+        <p class="about-line" id="aboutLine">Качалка</p>
+        <div class="field-row wrap-row">
+          <button class="btn ghost" type="button" data-open="" id="openRepo"><i class="ph ph-github-logo" aria-hidden="true"></i><span>Страница проекта</span></button>
+          <button class="btn ghost" type="button" data-open="/issues/new" id="openIssue"><i class="ph ph-chat-circle-text" aria-hidden="true"></i><span>Сообщить о проблеме</span></button>
+        </div>
+        <p class="help">Качалка ничего не отправляет о тебе. Сеть нужна только чтобы скачивать видео и обновлять компоненты.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

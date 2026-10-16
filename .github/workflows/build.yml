@@ -1,0 +1,119 @@
+name: Сборка
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    name: Тесты (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Зависимости
+        run: python -m pip install pytest yt-dlp
+      - name: Юнит-тесты
+        run: python -m pytest -q
+      - name: Сквозной тест (качает yt-dlp, ffmpeg и deno как у нового пользователя)
+        run: python tests/smoke.py --own-tools
+
+  windows:
+    name: Установщик для Windows
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Зависимости
+        run: python -m pip install -r packaging/requirements-build.txt
+      - name: Сборка
+        run: python -m PyInstaller packaging/kachalka.spec --noconfirm --clean
+      - name: Установщик и portable-архив
+        shell: pwsh
+        run: |
+          $version = python -c "import kachalka; print(kachalka.__version__)"
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" packaging\windows\kachalka.iss
+          Compress-Archive -Path dist\Kachalka -DestinationPath "dist\Kachalka-$version-Windows-portable.zip"
+      - name: Проверка запуска собранного приложения
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\Kachalka\Kachalka.exe -ArgumentList "--headless","--port","8799","--data-dir","$env:RUNNER_TEMP\k" -PassThru
+          Start-Sleep -Seconds 15
+          $r = Invoke-RestMethod http://127.0.0.1:8799/api/ping
+          Stop-Process -Id $p.Id -Force
+          if ($r.app -ne "kachalka") { throw "приложение не ответило" }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: |
+            dist/*-Setup.exe
+            dist/*-portable.zip
+
+  macos:
+    name: Образ для macOS (${{ matrix.label }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Apple Silicon
+          - runner: macos-15-intel
+            label: Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Зависимости
+        run: python -m pip install -r packaging/requirements-build.txt
+      - name: Сборка .app и .dmg
+        run: PYTHON=python bash packaging/macos/build.sh
+      - name: Проверка запуска собранного приложения
+        run: |
+          "dist/Качалка.app/Contents/MacOS/Kachalka" --headless --port 8799 --data-dir "$RUNNER_TEMP/k" &
+          sleep 15
+          curl -sf http://127.0.0.1:8799/api/ping | grep -q kachalka
+          kill %1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-${{ matrix.runner }}
+          path: dist/*.dmg
+
+  release:
+    name: Релиз
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true
