@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import system
+from .cut import CHAPTER_TITLE
 from .settings import TEMPLATES, ApiError
 
 ERROR_RULES = [
@@ -405,9 +406,17 @@ def build_cmd(job, s: dict, tools, tmp_root: Path) -> list[str]:
     if o["thumb"]:
         cmd += ["--embed-thumbnail", "--convert-thumbnails", "jpg"]
     if o["sponsor"]:
-        cmd += ["--sponsorblock-remove", "sponsor,selfpromo,interaction"]
+        ads = "sponsor,selfpromo,interaction"
+        if o["mode"] == "audio":
+            cmd += ["--sponsorblock-remove", ads]
+        else:
+            # Склейка yt-dlp сбивает звук на каждом резе: он только ставит главы, режет cut.py.
+            cmd += ["--sponsorblock-mark", ads, "--sponsorblock-chapter-title", CHAPTER_TITLE]
     if o["start"] or o["end"]:
         cmd += ["--download-sections", f"*{o['start'] or '0'}-{o['end'] or 'inf'}"]
+        if o["mode"] != "audio":
+            # Без этого кусок начинается с ближайшего ключевого кадра: стоп-кадр и мусор в начале.
+            cmd.append("--force-keyframes-at-cuts")
     if job.force:
         cmd.append("--force-overwrites")
     cmd += common_args(s)

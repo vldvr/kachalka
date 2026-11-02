@@ -229,6 +229,17 @@ class Tools:
         return self.state["yt-dlp"]["path"]
 
     @property
+    def ffmpeg(self) -> str:
+        return self.state["ffmpeg"]["path"]
+
+    @property
+    def ffprobe(self) -> str:
+        if not self.ffmpeg:
+            return ""
+        near = Path(self.ffmpeg).with_name(self.exe("ffprobe"))
+        return str(near) if near.exists() else shutil.which("ffprobe", path=system.SEARCH_PATH) or ""
+
+    @property
     def ready(self) -> bool:
         return all(self.state[name]["status"] == "ready" for name in REQUIRED)
 
