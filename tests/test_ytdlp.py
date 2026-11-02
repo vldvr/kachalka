@@ -159,3 +159,20 @@ def test_format_selection_with_real_ytdlp(tmp_path, opts, group, expected):
     out = subprocess.run(["yt-dlp", "--load-info-json", str(info), "--simulate", "--no-warnings",
                           "--print", "format_id", *picked], capture_output=True, text=True, timeout=120)
     assert out.stdout.strip() == expected, out.stderr
+
+
+def test_sponsor_video_is_marked_not_cut_by_ytdlp():
+    cmd, _ = args_for({"mode": "video", "sponsor": True})
+    assert "--sponsorblock-remove" not in cmd
+    assert cmd[cmd.index("--sponsorblock-mark") + 1] == "sponsor,selfpromo,interaction"
+    assert cmd[cmd.index("--sponsorblock-chapter-title") + 1].startswith("[SponsorBlock]")
+    # В одном звуке рассинхрону взяться неоткуда: тут режет сам yt-dlp.
+    cmd, _ = args_for({"mode": "audio", "sponsor": True})
+    assert "--sponsorblock-remove" in cmd and "--sponsorblock-mark" not in cmd
+
+
+def test_sections_force_keyframes_only_for_video():
+    cmd, _ = args_for({"mode": "video", "start": "1:00"})
+    assert "--force-keyframes-at-cuts" in cmd
+    cmd, _ = args_for({"mode": "audio", "start": "1:00"})
+    assert "--force-keyframes-at-cuts" not in cmd

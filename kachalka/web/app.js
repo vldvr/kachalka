@@ -561,7 +561,8 @@ function renderOpts(focusKey) {
       : 'У этого видео субтитров нет.', o.subs && subsAvailable, !subsAvailable));
   }
   if (isYouTube(info.url)) {
-    parts.push(check('sponsor', 'Вырезать рекламные вставки', 'По базе SponsorBlock: реклама спонсоров, самопиар и просьбы подписаться.', o.sponsor));
+    parts.push(check('sponsor', 'Вырезать рекламные вставки', 'По базе SponsorBlock: реклама спонсоров, самопиар и просьбы подписаться.'
+      + (audio ? '' : ' Чтобы звук не съехал, видео пересжимается: это займёт время.'), o.sponsor));
   }
   if (isVideo && !info.live) {
     parts.push(`

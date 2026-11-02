@@ -11,7 +11,7 @@ import uuid
 from collections import deque
 from pathlib import Path
 
-from . import system
+from . import cut, system
 from .settings import DEFAULT_OPTS, ApiError, Settings
 from .tools import Tools
 from .ytdlp import PP_STAGES, build_cmd, explain_error, normalize_url, num
@@ -235,12 +235,23 @@ class Manager:
         except OSError as e:
             tail.append(f"ERROR: {e}")
             rc = -1
+        cut_failed = ""
+        if rc == 0 and not job.cancel_requested and self._wants_cut(job):
+            try:
+                self._cut(job)
+            except (cut.CutError, OSError, ValueError) as e:
+                cut_failed = str(e).strip() or type(e).__name__
         with self.lock:
             job.proc = None
             job.speed = job.eta = None
             job.finished = time.time()
             if job.cancel_requested:
                 job.status, job.stage = "canceled", ""
+            elif cut_failed:
+                job.status, job.stage = "error", ""
+                job.error = "Не получилось вырезать рекламу. Видео сохранено целиком."
+                job.hint, job.raw_error = "", cut_failed[-2000:]
+                log.warning("job %s: cut failed: %s", job.id, cut_failed)
             elif rc == 0:
                 job.status, job.stage, job.progress = "done", "", 1.0
                 drop_temp(self.paths.tmp / job.id)
@@ -255,6 +266,35 @@ class Manager:
                 log.warning("job %s failed: %s", job.id, job.raw_error)
         self.save()
         self.wake.set()
+
+    @staticmethod
+    def _wants_cut(job: Job) -> bool:
+        return (bool(job.opts.get("sponsor")) and job.opts.get("mode") != "audio"
+                and bool(job.file) and os.path.exists(job.file))
+
+    def _cut(self, job: Job):
+        """Вставки yt-dlp только отметил главами: режем точно, см. cut.py."""
+        stage = "Вырезаю рекламные вставки"
+
+        def on_proc(proc):
+            with self.lock:
+                job.proc = proc
+                if proc and job.cancel_requested:
+                    system.kill_tree(proc)
+
+        def on_progress(f: float):
+            job.stage = f"{stage} · {int(f * 100)}%"
+
+        with self.lock:
+            job.status, job.stage = "processing", stage
+            job.speed = job.eta = None
+        try:
+            cut.remove_ads(job.file, self.tools.ffmpeg, self.tools.ffprobe, self.tools.env(),
+                           self.paths.tmp / job.id / "cut", on_proc, on_progress)
+        except cut.CutError:
+            if job.cancel_requested:
+                return
+            raise
 
     def _line(self, job: Job, line: str, phase: dict, sizes: list, tail: deque):
         if not line:
